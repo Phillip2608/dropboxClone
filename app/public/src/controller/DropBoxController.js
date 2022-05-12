@@ -1,30 +1,102 @@
 class DropBoxController{
     constructor(){
+        this.onSelectionChange = new Event('selectionchange');
         this.btnSendFileEl = document.querySelector('#btn-send-file');
         this.inputFilesEl = document.querySelector('#files');
         this.snackModalEl = document.querySelector('#react-snackbar-root');
         this.progressBarEl = this.snackModalEl.querySelector('.mc-progress-bar-fg');
         this.nameFileEl = this.snackModalEl.querySelector('.filename');
         this.timeLeftEl = this.snackModalEl.querySelector('.timeleft');
+        this.listFileEl = document.querySelector('#list-of-files-and-directories');
+        this.btnNewFolder = document.querySelector('#btn-new-folder');
+        this.btnRename = document.querySelector('#btn-rename');
+        this.btnDelete = document.querySelector('#btn-delete');
+        this.connectFireBase();
         this.initEvents();
+        this.readFiles();
     }
 
     connectFireBase(){
-        let user = new FireBase
+        var firebaseConfig = {
+            apiKey: "AIzaSyCVZjAVLA_Uwu20ipJHxdTRvVPfpjOU0zg",
+         
+            authDomain: "dropboxclone-47b48.firebaseapp.com",
+         
+            databaseURL: "https://dropboxclone-47b48-default-rtdb.firebaseio.com",
+         
+            projectId: "dropboxclone-47b48",
+         
+            storageBucket: "dropboxclone-47b48.appspot.com",
+         
+            messagingSenderId: "1078096441947",
+         
+            appId: "1:1078096441947:web:4707a3ed64f1653db0057e",
+         
+            measurementId: "G-3FQ27F16M6"
+          };
+        firebase.initializeApp(firebaseConfig);
+
+    }
+
+    getSelection(){
+        return this.listFileEl.querySelectorAll('.selected');
     }
 
     initEvents(){
+
+        this.listFileEl.addEventListener('selectionchange', e=>{
+            console.log('selectionchange');
+            switch(this.getSelection().length){
+
+                case 0:
+                    this.btnDelete.style.display = 'none';
+                    this.btnRename.style.display = 'none';
+                break;
+
+                case 1:
+                    this.btnDelete.style.display = 'block';
+                    this.btnRename.style.display = 'block';
+                break;
+                
+                default:
+                    this.btnDelete.style.display = 'block';
+                    this.btnRename.style.display = 'none';
+
+            }
+
+        });
+
         this.btnSendFileEl.addEventListener('click', e=>{
             this.inputFilesEl.click();
         });
 
         this.inputFilesEl.addEventListener('change', e=>{
-            this.uploadTask(e.target.files)
+            this.btnSendFileEl.disabled = true;
+
+            this.uploadTask(e.target.files).then(responses =>{
+                responses.forEach(resp =>{
+                    this.getFirebaseRef().push().set(resp.files['input-file']);
+                });
+                this.uploadComplete();
+            }).catch(err =>{
+                this.uploadComplete();
+                console.error(err);
+            });
 
             this.modalShow();
 
-            this.inputFilesEl.value = '';
+           
         });
+    }
+
+    uploadComplete(){
+        this.modalShow(false);
+        this.inputFilesEl.value = '';
+        this.btnSendFileEl.disabled = false;
+    }
+
+    getFirebaseRef(){
+        return firebase.database().ref('files');
     }
 
     modalShow(show = true){
@@ -48,11 +120,11 @@ class DropBoxController{
                     }catch(e){
                         reject(e);
                     }
-                    this.modalShow(false);
+                    
                 };
 
                 ajax.onerror = event =>{
-                    this.modalShow(false);
+                    
                     reject(event);
                 };
 
@@ -112,7 +184,7 @@ class DropBoxController{
     }
 
     getFileIconView(file){
-        switch(file.type){
+        switch(file.mimetype){
             case 'folder':
                 return `
                 <svg width="160" height="160" viewBox="0 0 160 160" class="mc-icon-template-content tile__preview tile__preview--icon">
@@ -125,7 +197,6 @@ class DropBoxController{
                     </g>
                 </svg>
                 `
-            break;
 
             case 'video/mp4':
             case 'video/quicktime':
@@ -149,7 +220,6 @@ class DropBoxController{
                         </g>
                     </svg>
                 `;
-            break;
 
             case 'audio/mp3':
             case 'audio/ogg':
@@ -173,7 +243,6 @@ class DropBoxController{
                         </g>
                     </svg>
                 `;
-            break;
 
             case 'application/pdf':
                 return `
@@ -211,7 +280,6 @@ class DropBoxController{
                         />
                     </svg>
                 `;
-            break;
 
             case 'image/jpg':
             case 'image/jpeg':
@@ -260,8 +328,7 @@ class DropBoxController{
                         />
                     </g>
                 </svg>
-                `;
-            break;    
+                `;    
 
             default:
                 return `<svg width="160" height="160" viewBox="0 0 160 160" class="mc-icon-template-content tile__preview tile__preview--icon">
@@ -283,12 +350,81 @@ class DropBoxController{
         }
     }
 
-    getFileView(){
-        return `
-            <li>
-                ${this.getFileIconView(file)}
-                <div class="name text-center">Meus Documentos</div>
-            </li>
+    getFileView(file, key){
+
+        let li = document.createElement('li');
+
+        li.dataset.key = key;
+
+        li.innerHTML = `
+            ${this.getFileIconView(file)}
+            <div class="name text-center">${file.originalFilename}</div>
         `;
+
+        this.initEventsLi(li);
+
+        return li;
+    }
+
+    readFiles(){
+        this.getFirebaseRef().on('value', snapshot =>{
+
+            this.listFileEl.innerHTML = ''; 
+
+            snapshot.forEach(snapItem =>{
+                let key = snapItem.key;
+                let data = snapItem.val();
+
+                this.listFileEl.appendChild(this.getFileView(data, key));
+            });
+        });
+    }
+
+    initEventsLi(li){
+
+        li.addEventListener('click', e =>{
+            
+            if(e.shiftKey){
+
+                let firstLi = this.listFileEl.querySelector('.selected');
+
+                if(firstLi){
+
+                    let indexStart;
+                    let indexEnd;
+                    var lis = li.parentElement.childNodes;
+
+                    lis.forEach((el, index) =>{
+                        if(firstLi == el) indexStart = index;
+                        if(li == el) indexEnd = index;
+                    });
+
+                    let index = [indexStart, indexEnd].sort();
+
+                    lis.forEach((el, i) =>{
+                        if(i >= index[0] && i<= index[1]){
+                            el.classList.add('selected');
+                        }
+                    });
+
+                    this.listFileEl.dispatchEvent(this.onSelectionChange);
+
+                    return true;
+                }
+            }
+            
+            if(!e.ctrlKey){
+
+                this.listFileEl.querySelectorAll('li').forEach(el=>{
+                    el.classList.remove('selected');
+                }); 
+
+            }
+
+            li.classList.toggle('selected');
+
+            this.listFileEl.dispatchEvent(this.onSelectionChange);
+        });
+
     }
 }
