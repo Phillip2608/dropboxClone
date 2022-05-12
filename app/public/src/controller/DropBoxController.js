@@ -42,7 +42,37 @@ class DropBoxController{
         return this.listFileEl.querySelectorAll('.selected');
     }
 
+    editFile(key){
+        this.getFirebaseRef().on('value', snapshot =>{
+            
+            snapshot.forEach(snapItem =>{
+                if( key == snapItem.key){
+                    let data = snapItem.val();
+
+                    let name = prompt("Renomear o arquivo: ", data.originalFilename);
+                    if(name){
+                        data.originalFilename = name;
+
+                        this.getFirebaseRef().child(snapItem.key).set(data);
+                    }
+                }else{
+                    return false
+                } 
+            });
+        });
+    }
+
     initEvents(){
+
+        this.btnRename.addEventListener('click', e=>{
+            let li = this.getSelection()[0];
+
+            let key =  li.dataset.key;
+            
+            this.editFile(key)
+            //let name = prompt("Renomear o arquivo", file.name);
+
+        });
 
         this.listFileEl.addEventListener('selectionchange', e=>{
             console.log('selectionchange');
@@ -355,6 +385,7 @@ class DropBoxController{
         let li = document.createElement('li');
 
         li.dataset.key = key;
+        li.dataset.flie = JSON.stringify(file);
 
         li.innerHTML = `
             ${this.getFileIconView(file)}
